@@ -1,4 +1,12 @@
+import { z } from 'zod';
 import { RetailerConfig } from '../domain/retailer';
+
+const intervalOverrideSchema = z
+  .object({
+    min: z.coerce.number().positive(),
+    max: z.coerce.number().positive(),
+  })
+  .refine((value) => value.max >= value.min);
 
 export function loadRetailerConfigs(): RetailerConfig[] {
   const amazonAsin = process.env.AMAZON_ES_ASIN || undefined;
@@ -38,13 +46,15 @@ export function loadRetailerConfigs(): RetailerConfig[] {
 }
 
 function loadIntervalOverride(prefix: string): RetailerConfig['checkIntervalMsOverride'] {
-  const minSeconds = Number(process.env[`${prefix}_CHECK_INTERVAL_MIN_SECONDS`]);
-  const maxSeconds = Number(process.env[`${prefix}_CHECK_INTERVAL_MAX_SECONDS`]);
-  if (!Number.isFinite(minSeconds) && !Number.isFinite(maxSeconds)) return undefined;
-  if (!Number.isFinite(minSeconds) || !Number.isFinite(maxSeconds) || minSeconds <= 0 || maxSeconds < minSeconds) {
+  const minRaw = process.env[`${prefix}_CHECK_INTERVAL_MIN_SECONDS`];
+  const maxRaw = process.env[`${prefix}_CHECK_INTERVAL_MAX_SECONDS`];
+  if (minRaw === undefined && maxRaw === undefined) return undefined;
+
+  const result = intervalOverrideSchema.safeParse({ min: minRaw, max: maxRaw });
+  if (!result.success) {
     throw new Error(
       `${prefix}_CHECK_INTERVAL_MIN_SECONDS and ${prefix}_CHECK_INTERVAL_MAX_SECONDS must be positive numbers with max >= min`,
     );
   }
-  return { min: minSeconds * 1000, max: maxSeconds * 1000 };
+  return { min: result.data.min * 1000, max: result.data.max * 1000 };
 }

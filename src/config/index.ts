@@ -1,4 +1,14 @@
 import 'dotenv/config';
+import { z } from 'zod';
+
+const envSchema = z.object({
+  TELEGRAM_BOT_TOKEN: z.string().optional(),
+  TELEGRAM_CHAT_ID: z.string().optional(),
+  CHECK_INTERVAL_MIN_SECONDS: z.coerce.number().default(60),
+  CHECK_INTERVAL_MAX_SECONDS: z.coerce.number().default(80),
+  DATA_DIR: z.string().default('./data'),
+  SIGNIFICANT_PRICE_CHANGE_PERCENT: z.coerce.number().default(5),
+});
 
 export interface AppConfig {
   telegramBotToken?: string;
@@ -10,15 +20,16 @@ export interface AppConfig {
 }
 
 export function loadAppConfig(): AppConfig {
-  const minSeconds = Number(process.env.CHECK_INTERVAL_MIN_SECONDS ?? 60);
-  const maxSeconds = Number(process.env.CHECK_INTERVAL_MAX_SECONDS ?? 80);
+  const env = envSchema.parse(process.env);
+  const minSeconds = env.CHECK_INTERVAL_MIN_SECONDS;
+  const maxSeconds = env.CHECK_INTERVAL_MAX_SECONDS;
 
   return {
-    telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || undefined,
-    telegramChatId: process.env.TELEGRAM_CHAT_ID || undefined,
+    telegramBotToken: env.TELEGRAM_BOT_TOKEN || undefined,
+    telegramChatId: env.TELEGRAM_CHAT_ID || undefined,
     checkIntervalMinMs: minSeconds * 1000,
     checkIntervalMaxMs: Math.max(maxSeconds, minSeconds) * 1000,
-    dataDir: process.env.DATA_DIR ?? './data',
-    significantPriceChangePercent: Number(process.env.SIGNIFICANT_PRICE_CHANGE_PERCENT ?? 5),
+    dataDir: env.DATA_DIR,
+    significantPriceChangePercent: env.SIGNIFICANT_PRICE_CHANGE_PERCENT,
   };
 }

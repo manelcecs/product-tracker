@@ -39,8 +39,9 @@ Sends Telegram notifications when a tracked retailer's page transitions between 
 src/
   domain/          stock-status.ts, product.ts, retailer.ts, transitions.ts — pure types & logic
   adapters/         base.ts (RetailerAdapter interface) + one file per retailer + registry.ts
-  config/            index.ts (app config), product.ts (product identity), retailers.ts (retailer list)
+  config/            index.ts (app config), product.ts (product identity), retailers.ts (retailer list) — env validated with Zod schemas
   http/client.ts     shared fetch wrapper: realistic UA, Accept-Language, timeout, Retry-After parsing
+  http/status.ts     classifyHttpStatus() — HTTP status classification using http-status-codes StatusCodes constants
   notifications/    telegram.ts (client), messages.ts (message formatting)
   persistence/       store.ts — atomic JSON state store
   scheduler/         monitor.ts (single check + notify), scheduler.ts (per-retailer timers/jitter/backoff)

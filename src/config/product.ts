@@ -1,4 +1,16 @@
+import { z } from 'zod';
 import { ProductIdentity } from '../domain/product';
+
+const envSchema = z.object({
+  PRODUCT_NAME: z.string().default('Nintendo Switch 2 - The Legend of Zelda 40th Anniversary Edition'),
+  PRODUCT_EAN: z.string().default('0045496337292'),
+  PRODUCT_MPN: z.string().default('10019448'),
+  PRODUCT_RELEASE_DATE: z.string().default('2026-10-29'),
+  PRODUCT_REQUIRED_KEYWORDS: z.string().default('nintendo switch 2,zelda,40'),
+  PRODUCT_EXCLUDED_KEYWORDS: z
+    .string()
+    .default('funda,carcasa,mando,case,grip,protector,cable,soporte,figura,amiibo,dock'),
+});
 
 function splitKeywords(value: string): string[] {
   return value
@@ -8,15 +20,14 @@ function splitKeywords(value: string): string[] {
 }
 
 export function loadProductIdentity(): ProductIdentity {
+  const env = envSchema.parse(process.env);
+
   return {
-    name: process.env.PRODUCT_NAME ?? 'Nintendo Switch 2 - The Legend of Zelda 40th Anniversary Edition',
-    ean: process.env.PRODUCT_EAN ?? '0045496337292',
-    mpn: process.env.PRODUCT_MPN ?? '10019448',
-    releaseDate: process.env.PRODUCT_RELEASE_DATE ?? '2026-10-29',
-    requiredKeywords: splitKeywords(process.env.PRODUCT_REQUIRED_KEYWORDS ?? 'nintendo switch 2,zelda,40'),
-    excludedKeywords: splitKeywords(
-      process.env.PRODUCT_EXCLUDED_KEYWORDS ??
-        'funda,carcasa,mando,case,grip,protector,cable,soporte,figura,amiibo,dock',
-    ),
+    name: env.PRODUCT_NAME,
+    ean: env.PRODUCT_EAN,
+    mpn: env.PRODUCT_MPN,
+    releaseDate: env.PRODUCT_RELEASE_DATE,
+    requiredKeywords: splitKeywords(env.PRODUCT_REQUIRED_KEYWORDS),
+    excludedKeywords: splitKeywords(env.PRODUCT_EXCLUDED_KEYWORDS),
   };
 }

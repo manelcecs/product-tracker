@@ -1,6 +1,7 @@
 import { RetailerAdapter } from './base';
 import { EvidenceSource, ProductAvailability } from '../domain/retailer';
 import { httpGet, parseRetryAfterSeconds } from '../http/client';
+import { classifyHttpStatus } from '../http/status';
 import { availabilityToStatus, extractJsonLdProducts } from '../utils/json-ld';
 import { extractMicrodataProduct } from '../utils/microdata';
 import { isProductMatch } from '../domain/product';
@@ -29,17 +30,9 @@ export class FnacEsAdapter extends RetailerAdapter {
     const checkedAt = new Date().toISOString();
     const base = { checkedAt, httpStatus, durationMs, productUrl: this.config.productUrl };
 
-    if (httpStatus === 429) {
-      return this.unknown({ ...base, status: 'ERROR', errorMessage: 'rate limited (429)', retryAfterSeconds });
-    }
-    if (httpStatus === 403) {
-      return this.unknown({ ...base, status: 'BLOCKED', errorMessage: 'forbidden (403)' });
-    }
-    if (httpStatus === 404) {
-      return this.unknown({ ...base, status: 'PRODUCT_REMOVED' });
-    }
-    if (httpStatus >= 500) {
-      return this.unknown({ ...base, status: 'ERROR', errorMessage: `server error (${httpStatus})` });
+    const classification = classifyHttpStatus(httpStatus, retryAfterSeconds);
+    if (classification) {
+      return this.unknown({ ...base, ...classification });
     }
     if (isChallengePage(html)) {
       return this.unknown({ ...base, status: 'BLOCKED', errorMessage: 'CAPTCHA / anti-bot challenge detected' });

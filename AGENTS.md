@@ -15,8 +15,9 @@ Instructions for AI coding agents working in this repository.
 - `src/adapters` — one file per retailer implementing `RetailerAdapter` (`src/adapters/base.ts`). Each adapter exposes:
   - `check()` — performs the live HTTP GET and delegates to `parse()`.
   - `parse(html, httpStatus, durationMs?, retryAfterSeconds?)` — pure, synchronous, and what tests call directly with fixture HTML. Never make network calls from `parse()`.
-- `src/config` — env-driven configuration for the product identity (`product.ts`) and retailer list (`retailers.ts`).
+- `src/config` — env-driven configuration for app settings (`index.ts`), product identity (`product.ts`), and retailer list (`retailers.ts`). Env parsing/validation goes through [Zod](https://zod.dev) schemas (`z.object(...).parse()`/`safeParse()`), not hand-rolled `Number`/`isFinite` checks.
 - `src/http/client.ts` — shared `httpGet` wrapper (timeout, realistic UA/Accept-Language headers, Retry-After parsing). No asset downloads, no proxy rotation for evasion.
+- `src/http/status.ts` — `classifyHttpStatus()` maps non-2xx responses to a stock classification using named [`http-status-codes`](https://github.com/prettymuchbryce/http-status-codes) `StatusCodes` constants instead of raw numbers (429/403/404/5xx). Adapters call this before inspecting page content.
 - `src/notifications` — Telegram client (`telegram.ts`) and message formatting (`messages.ts`).
 - `src/persistence/store.ts` — atomic JSON state store (survives restarts, no native/SQLite dependency).
 - `src/scheduler` — `monitor.ts` runs one check + persists + decides notifications; `scheduler.ts` handles independent per-retailer timers with jitter/stagger/backoff.
@@ -24,7 +25,7 @@ Instructions for AI coding agents working in this repository.
 ## Adding a retailer
 
 1. Add a `RetailerConfig` entry in `src/config/retailers.ts` (id, name, default `productUrl`, `enabled` flag driven by an env var).
-2. Implement `src/adapters/<id>.ts` extending `RetailerAdapter`. Prefer structured data (JSON-LD `schema.org/Product`, microdata) over generic text/button matching. Verify product identity via EAN/MPN or exact required-keyword matching (`src/domain/product.ts#isProductMatch`), and return `UNKNOWN` whenever identity can't be confirmed. Map HTTP 403 → `BLOCKED`, 404 → `PRODUCT_REMOVED`, 429 → `ERROR` with `retryAfterSeconds` set, 5xx → `ERROR`.
+2. Implement `src/adapters/<id>.ts` extending `RetailerAdapter`. Prefer structured data (JSON-LD `schema.org/Product`, microdata) over generic text/button matching. Verify product identity via EAN/MPN or exact required-keyword matching (`src/domain/product.ts#isProductMatch`), and return `UNKNOWN` whenever identity can't be confirmed. Call `classifyHttpStatus()` from `src/http/status.ts` first: 403 → `BLOCKED`, 404 → `PRODUCT_REMOVED`, 429 → `ERROR` with `retryAfterSeconds` set, 5xx → `ERROR`. Do not compare `httpStatus` against raw numeric literals — add a new case to `classifyHttpStatus()` if one is missing.
 3. Register the adapter constructor in `src/adapters/registry.ts`.
 4. Add fixture HTML files under `test/fixtures/<id>/` covering at minimum: correct product available, correct product unavailable/preorder, wrong product/accessory, malformed HTML, HTTP 403, HTTP 429.
 5. Add `test/adapters/<id>.test.ts` exercising `parse()` against those fixtures — no live network calls in tests.

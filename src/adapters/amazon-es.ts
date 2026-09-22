@@ -2,6 +2,7 @@ import * as cheerio from 'cheerio';
 import { RetailerAdapter } from './base';
 import { EvidenceSource, ProductAvailability } from '../domain/retailer';
 import { httpGet, parseRetryAfterSeconds } from '../http/client';
+import { classifyHttpStatus } from '../http/status';
 import { isProductMatch } from '../domain/product';
 import { parsePrice } from '../utils/price';
 import { logger } from '../utils/logger';
@@ -43,17 +44,9 @@ export class AmazonEsAdapter extends RetailerAdapter {
     const checkedAt = new Date().toISOString();
     const base = { checkedAt, httpStatus, durationMs, productUrl: this.config.productUrl };
 
-    if (httpStatus === 429) {
-      return this.unknown({ ...base, status: 'ERROR', errorMessage: 'rate limited (429)', retryAfterSeconds });
-    }
-    if (httpStatus === 403) {
-      return this.unknown({ ...base, status: 'BLOCKED', errorMessage: 'forbidden (403)' });
-    }
-    if (httpStatus === 404) {
-      return this.unknown({ ...base, status: 'PRODUCT_REMOVED' });
-    }
-    if (httpStatus >= 500) {
-      return this.unknown({ ...base, status: 'ERROR', errorMessage: `server error (${httpStatus})` });
+    const classification = classifyHttpStatus(httpStatus, retryAfterSeconds);
+    if (classification) {
+      return this.unknown({ ...base, ...classification });
     }
 
     if (isChallengePage(html)) {
