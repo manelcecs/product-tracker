@@ -1,0 +1,30 @@
+{
+  "name": "product-tracker",
+  "version": "1.0.0",
+  "description": "Self-hosted stock/price monitor for a configurable retail product, defaulting to Nintendo Switch 2 - The Legend of Zelda 40th Anniversary Edition.",
+  "private": true,
+  "packageManager": "bun@1.2.8",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "bun dist/index.js",
+    "dev": "bun --watch src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "bun": ">=1.2.0"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "dotenv": "^16.4.5",
+    "pino": "^9.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.4",
+    "pino-pretty": "^11.2.2",
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.1"
+  }
+}
