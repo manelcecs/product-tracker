@@ -10,6 +10,7 @@ const intervalOverrideSchema = z
 
 export function loadRetailerConfigs(): RetailerConfig[] {
   const amazonAsin = process.env.AMAZON_ES_ASIN || undefined;
+  const elCorteInglesUrl = process.env.ELCORTEINGLES_ES_URL || undefined;
 
   return [
     {
@@ -41,6 +42,16 @@ export function loadRetailerConfigs(): RetailerConfig[] {
       enabled: Boolean(amazonAsin) && process.env.AMAZON_ES_ENABLED === 'true',
       checkIntervalMsOverride: loadIntervalOverride('AMAZON_ES'),
       meta: { asin: amazonAsin ?? null },
+    },
+    {
+      id: 'elcorteingles-es',
+      name: 'El Corte Inglés ES',
+      productUrl: elCorteInglesUrl ?? '',
+      // Disabled by default: no verified direct product URL for this exact
+      // bundle yet (category/accessory pages don't count). Set
+      // ELCORTEINGLES_ES_URL and ELCORTEINGLES_ES_ENABLED=true once confirmed.
+      enabled: Boolean(elCorteInglesUrl) && process.env.ELCORTEINGLES_ES_ENABLED === 'true',
+      checkIntervalMsOverride: loadIntervalOverride('ELCORTEINGLES_ES'),
     },
   ];
 }
