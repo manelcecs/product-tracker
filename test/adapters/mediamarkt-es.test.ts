@@ -60,4 +60,25 @@ describe('MediaMarktEsAdapter', () => {
   it('maps HTTP 404 to PRODUCT_REMOVED', () => {
     expect(adapter.parse('', 404).status).toBe('PRODUCT_REMOVED');
   });
+
+  it('reports OUT_OF_STOCK for the live BuyAction/ProductGroup JSON-LD shape', () => {
+    const result = adapter.parse(loadFixture('mediamarkt/live-buyaction-out-of-stock.html'), 200);
+    expect(result.status).toBe('OUT_OF_STOCK');
+    expect(result.productVerified).toBe(true);
+    expect(result.price).toBeCloseTo(519);
+    expect(result.currency).toBe('EUR');
+  });
+
+  it('never reports AVAILABLE from InStock addOn/service offers when the main offer is OutOfStock', () => {
+    const result = adapter.parse(loadFixture('mediamarkt/live-buyaction-out-of-stock.html'), 200);
+    expect(result.status).toBe('OUT_OF_STOCK');
+    expect(result.status).not.toBe('AVAILABLE');
+  });
+
+  it('does not flag a real product page as BLOCKED just because its app-config JSON embeds reCAPTCHA/Turnstile site keys', () => {
+    const result = adapter.parse(loadFixture('mediamarkt/app-config-recaptcha-turnstile.html'), 200);
+    expect(result.status).not.toBe('BLOCKED');
+    expect(result.status).toBe('OUT_OF_STOCK');
+    expect(result.productVerified).toBe(true);
+  });
 });
