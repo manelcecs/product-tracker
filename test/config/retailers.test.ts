@@ -55,4 +55,16 @@ describe('loadRetailerConfigs', () => {
     expect(elCorteIngles?.enabled).toBe(true);
     expect(elCorteIngles?.productUrl).toBe('https://www.elcorteingles.es/example/a40123456');
   });
+
+  it('enables Amazon ES only when both an ASIN and the enabled flag are provided', () => {
+    delete process.env.AMAZON_ES_ASIN;
+    delete process.env.AMAZON_ES_ENABLED;
+    expect(loadRetailerConfigs().find((r) => r.id === 'amazon-es')?.enabled).toBe(false);
+
+    process.env.AMAZON_ES_ASIN = 'B0F2TN43GH';
+    process.env.AMAZON_ES_ENABLED = 'true';
+    const amazon = loadRetailerConfigs().find((retailer) => retailer.id === 'amazon-es');
+    expect(amazon?.enabled).toBe(true);
+    expect(amazon?.productUrl).toBe('https://www.amazon.es/dp/B0F2TN43GH');
+  });
 });

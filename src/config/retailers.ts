@@ -37,8 +37,8 @@ export function loadRetailerConfigs(): RetailerConfig[] {
       id: 'amazon-es',
       name: 'Amazon ES',
       productUrl: amazonAsin ? `https://www.amazon.es/dp/${amazonAsin}` : '',
-      // Disabled by default: no verified ASIN for this exact bundle yet.
-      // Set AMAZON_ES_ASIN and AMAZON_ES_ENABLED=true once confirmed.
+      // Verified ASIN B0F2TN43GH (live-checked 2026-09-24). Set
+      // AMAZON_ES_ASIN and AMAZON_ES_ENABLED=true to enable.
       enabled: Boolean(amazonAsin) && process.env.AMAZON_ES_ENABLED === 'true',
       checkIntervalMsOverride: loadIntervalOverride('AMAZON_ES'),
       meta: { asin: amazonAsin ?? null },
