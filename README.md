@@ -17,16 +17,17 @@ Sends Telegram notifications when a tracked retailer's page transitions between 
 | `UNKNOWN`         | Product identity or availability could not be confidently determined. Default whenever parsing is ambiguous — **never** reported as a false `AVAILABLE`. |
 | `ERROR`           | Transient failure (network error, HTTP 429, 5xx). Previous known status is preserved in persisted state until a successful check updates it. |
 
-## Verified retailer coverage (as of this V1)
+## Verified retailer coverage (live-verified 2026-09-24)
 
 | Retailer      | Coverage                                                                                   |
 |---------------|-----------------------------------------------------------------------------------------------|
-| MediaMarkt ES | Known product URL/ID provided by the user (`1674231`). Adapter parses JSON-LD `schema.org/Product`. **Not live-verified against the real page in this session** — verify the JSON-LD shape against the live page before relying on it. |
-| Fnac ES       | Known product URL/slug provided by the user (`a13481099`). Adapter tries JSON-LD first, falls back to schema.org microdata. **Not live-verified** — confirm which structured-data format Fnac actually serves before relying on it. |
-| Amazon ES     | Structural adapter template only, **disabled by default**. No verified ASIN for this exact bundle was available at implementation time. TODO: research the correct ASIN, set `AMAZON_ES_ASIN` and `AMAZON_ES_ENABLED=true` in `.env`, and validate the adapter's DOM selectors (`#productTitle`, `#availability`, `.a-price`) against the real page before trusting it. |
-| El Corte Inglés ES | Structured-data adapter (JSON-LD first, microdata fallback), **disabled by default**. No verified direct product page for this exact bundle was found at implementation time — only a category page (`elcorteingles.pt/gaming/nintendo/nintendo-switch-2/`) listing an unrelated accessory (a 40th Anniversary case/screen protector bundle, not the console) was located. TODO: research the correct direct product URL, set `ELCORTEINGLES_ES_URL` and `ELCORTEINGLES_ES_ENABLED=true` in `.env`. **Do not** configure a category or accessory page as the product URL — the adapter's EAN/MPN/keyword matching will correctly reject it as `UNKNOWN`, but it wastes a check cycle and risks confusion. |
+| MediaMarkt ES | Live-verified (HTTP 200). The real page's JSON-LD is a `BuyAction` wrapping a `ProductGroup` (not a bare `Product`), with the primary `Offer` carrying `addOn` line items (installation/protection services) that are frequently `InStock` even while the console itself is `OutOfStock`. The adapter/JSON-LD parser only ever reads the `ProductGroup`'s own `offers`, never `addOn` entries. |
+| Amazon ES     | Live-verified ASIN `B0F2TN43GH` (HTTP 200). The page title omits "40" ("Nintendo Switch 2 - The Legend of Zelda Edition"), so identity is verified via the "Número de modelo del producto" detail bullet (MPN `10019448`) rather than title keywords. Price is read only from buy-box containers (`#corePriceDisplay_desktop_feature_div`, `#corePrice_feature_div`, `#apex_desktop`, `#buybox`, `#price_inside_buybox`) to avoid picking up unrelated sponsored/carousel item prices elsewhere on the page. Enabled by default. |
+| GAME ES       | Live-verified (HTTP 200), added in this pass. JSON-LD `Product` with a top-level `AggregateOffer` wrapping the real per-offer `availability`/`price` inside a nested `offers` array (not a bare `Offer`). JSON-LD string values are HTML-entity-encoded even inside the `<script>` block (e.g. `Edici&#243;n`) and are decoded before keyword matching. Enabled by default. |
 
 **TODO before broad rollout:** re-verify the EAN/MPN and each retailer's current page structure close to the product's actual release window (2026-10-29), since retailer markup and structured data change over time.
+
+**Not supported: Fnac ES and El Corte Inglés ES.** Both were live-checked on 2026-09-24 and sit behind Akamai Bot Manager, which returns HTTP 403 to every automated client (the app's HTTP client, curl, and even real headless Chrome) while the same pages load normally for a person in a regular browser on the same network. Monitoring them would require anti-bot evasion, which is out of scope, so their adapters were removed. For those stores, use official channels instead (e.g. Fnac's Telegram channel `@fnacesp`, or an affiliate product feed).
 
 ## Non-goals / safety boundaries
 
@@ -46,7 +47,7 @@ src/
   notifications/    telegram.ts (client), messages.ts (message formatting)
   persistence/       store.ts — atomic JSON state store
   scheduler/         monitor.ts (single check + notify), scheduler.ts (per-retailer timers/jitter/backoff)
-  utils/             logger.ts, backoff.ts, jitter.ts, price.ts, json-ld.ts, microdata.ts
+  utils/             logger.ts, backoff.ts, jitter.ts, price.ts, json-ld.ts, challenge.ts
   index.ts           entrypoint
 test/
   fixtures/<retailer>/   static HTML used by adapter tests (no live network)
