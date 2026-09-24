@@ -55,9 +55,9 @@ describe('JsonStateStore', () => {
         initialized: true,
       }),
       store.set({
-        retailerId: 'fnac-es',
-        retailerName: 'Fnac ES',
-        productUrl: 'https://example.com/fnac',
+        retailerId: 'game-es',
+        retailerName: 'GAME ES',
+        productUrl: 'https://example.com/game',
         status: 'PREORDER',
         price: 579.99,
         currency: 'EUR',
@@ -69,6 +69,6 @@ describe('JsonStateStore', () => {
     const raw = await readFile(path.join(dir, 'state.json'), 'utf-8');
     const persisted = JSON.parse(raw);
     expect(persisted['mediamarkt-es'].status).toBe('OUT_OF_STOCK');
-    expect(persisted['fnac-es'].status).toBe('PREORDER');
+    expect(persisted['game-es'].status).toBe('PREORDER');
   });
 });

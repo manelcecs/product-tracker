@@ -10,7 +10,6 @@ const intervalOverrideSchema = z
 
 export function loadRetailerConfigs(): RetailerConfig[] {
   const amazonAsin = process.env.AMAZON_ES_ASIN || undefined;
-  const elCorteInglesUrl = process.env.ELCORTEINGLES_ES_URL || undefined;
 
   return [
     {
@@ -24,16 +23,6 @@ export function loadRetailerConfigs(): RetailerConfig[] {
       meta: { retailerProductId: '1674231' },
     },
     {
-      id: 'fnac-es',
-      name: 'Fnac ES',
-      productUrl:
-        process.env.FNAC_ES_URL ??
-        'https://www.fnac.es/Consola-Nintendo-Switch-2-The-Legend-of-Zelda-40-Aniversario-Videoconsola/a13481099',
-      enabled: process.env.FNAC_ES_ENABLED !== 'false',
-      checkIntervalMsOverride: loadIntervalOverride('FNAC_ES'),
-      meta: { retailerProductId: 'a13481099' },
-    },
-    {
       id: 'amazon-es',
       name: 'Amazon ES',
       productUrl: amazonAsin ? `https://www.amazon.es/dp/${amazonAsin}` : '',
@@ -42,16 +31,6 @@ export function loadRetailerConfigs(): RetailerConfig[] {
       enabled: Boolean(amazonAsin) && process.env.AMAZON_ES_ENABLED === 'true',
       checkIntervalMsOverride: loadIntervalOverride('AMAZON_ES'),
       meta: { asin: amazonAsin ?? null },
-    },
-    {
-      id: 'elcorteingles-es',
-      name: 'El Corte Inglés ES',
-      productUrl: elCorteInglesUrl ?? '',
-      // Disabled by default: no verified direct product URL for this exact
-      // bundle yet (category/accessory pages don't count). Set
-      // ELCORTEINGLES_ES_URL and ELCORTEINGLES_ES_ENABLED=true once confirmed.
-      enabled: Boolean(elCorteInglesUrl) && process.env.ELCORTEINGLES_ES_ENABLED === 'true',
-      checkIntervalMsOverride: loadIntervalOverride('ELCORTEINGLES_ES'),
     },
   ];
 }

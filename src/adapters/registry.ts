@@ -1,8 +1,6 @@
 import { RetailerAdapter } from './base';
 import { MediaMarktEsAdapter } from './mediamarkt-es';
-import { FnacEsAdapter } from './fnac-es';
 import { AmazonEsAdapter } from './amazon-es';
-import { ElCorteInglesEsAdapter } from './elcorteingles-es';
 import { RetailerConfig } from '../domain/retailer';
 import { ProductIdentity } from '../domain/product';
 
@@ -10,9 +8,7 @@ type AdapterConstructor = new (config: RetailerConfig, product: ProductIdentity)
 
 const ADAPTER_CONSTRUCTORS: Record<string, AdapterConstructor> = {
   'mediamarkt-es': MediaMarktEsAdapter,
-  'fnac-es': FnacEsAdapter,
   'amazon-es': AmazonEsAdapter,
-  'elcorteingles-es': ElCorteInglesEsAdapter,
 };
 
 export function buildAdapters(configs: RetailerConfig[], product: ProductIdentity): RetailerAdapter[] {

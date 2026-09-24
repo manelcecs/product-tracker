@@ -10,7 +10,7 @@ export interface RetailerConfig {
 }
 
 export interface EvidenceSource {
-  /** e.g. 'json-ld:availability', 'microdata:price', 'dom:#availability' */
+  /** e.g. 'json-ld:availability', 'dom:#availability' */
   source: string;
   value: string;
 }
