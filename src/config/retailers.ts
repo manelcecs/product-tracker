@@ -32,6 +32,16 @@ export function loadRetailerConfigs(): RetailerConfig[] {
       checkIntervalMsOverride: loadIntervalOverride('AMAZON_ES'),
       meta: { asin: amazonAsin ?? null },
     },
+    {
+      id: 'game-es',
+      name: 'GAME ES',
+      productUrl:
+        process.env.GAME_ES_URL ??
+        'https://www.game.es/nintendo-switch-2-edicion-zelda-40th-nintendo-switch-2-267689',
+      enabled: process.env.GAME_ES_ENABLED !== 'false',
+      checkIntervalMsOverride: loadIntervalOverride('GAME_ES'),
+      meta: { retailerProductId: '267689' },
+    },
   ];
 }
 

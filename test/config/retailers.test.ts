@@ -25,7 +25,7 @@ describe('loadRetailerConfigs', () => {
   });
 
   it('only configures the supported retailers', () => {
-    expect(loadRetailerConfigs().map((retailer) => retailer.id)).toEqual(['mediamarkt-es', 'amazon-es']);
+    expect(loadRetailerConfigs().map((retailer) => retailer.id)).toEqual(['mediamarkt-es', 'amazon-es', 'game-es']);
   });
 
   it('enables Amazon ES only when both an ASIN and the enabled flag are provided', () => {
@@ -40,4 +40,18 @@ describe('loadRetailerConfigs', () => {
     expect(amazon?.productUrl).toBe('https://www.amazon.es/dp/B0F2TN43GH');
   });
 
+  it('defaults GAME ES to enabled with a default product URL', () => {
+    delete process.env.GAME_ES_ENABLED;
+    delete process.env.GAME_ES_URL;
+
+    const game = loadRetailerConfigs().find((retailer) => retailer.id === 'game-es');
+
+    expect(game?.enabled).toBe(true);
+    expect(game?.productUrl).toContain('game.es');
+  });
+
+  it('disables GAME ES when GAME_ES_ENABLED is explicitly "false"', () => {
+    process.env.GAME_ES_ENABLED = 'false';
+    expect(loadRetailerConfigs().find((r) => r.id === 'game-es')?.enabled).toBe(false);
+  });
 });
