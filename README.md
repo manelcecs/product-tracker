@@ -1,127 +1,171 @@
 # product-tracker
 
-Self-hosted stock/price monitor for a configurable retail product. Ships configured by default for **Nintendo Switch 2 — The Legend of Zelda 40th Anniversary Edition** (EAN 0045496337292, Nintendo MPN 10019448, release date 2026-10-29), but the product identity and retailer list are fully driven by environment variables — nothing is hard-coded to Zelda.
+A small self-hosted service that watches retailer product pages and sends you a **Telegram message when a product's stock status changes** — for example when it goes from `OUT_OF_STOCK` to `PREORDER` or `AVAILABLE`.
 
-Sends Telegram notifications when a tracked retailer's page transitions between stock states (e.g. `OUT_OF_STOCK` → `PREORDER` → `AVAILABLE`), and never performs any purchase, checkout, authentication, CAPTCHA-solving, or payment action. It only reads publicly served product pages.
+It ships configured for the **Nintendo Switch 2 — The Legend of Zelda 40th Anniversary Edition** (EAN `0045496337292`, MPN `10019448`) at Spanish retailers, but the product identity and retailer URLs are all set through environment variables. Nothing is hard-coded to that product.
 
-## Stock states
+> **It only watches. It never buys.** product-tracker reads publicly served product pages and nothing else: no carts, logins, checkout, payments, CAPTCHA solving, or anti-bot evasion. See [Safety boundaries](#safety-boundaries).
 
-| Status            | Meaning                                                              |
-|-------------------|-----------------------------------------------------------------------|
-| `AVAILABLE`       | Verified product, in stock, buyable now.                             |
-| `PREORDER`        | Verified product, reservable ahead of release.                       |
-| `OUT_OF_STOCK`     | Verified product, currently sold out.                                 |
-| `COMING_SOON`     | Verified product, listed but not yet orderable.                      |
-| `PRODUCT_REMOVED` | The page returned HTTP 404 (listing gone).                           |
-| `BLOCKED`         | Retailer returned HTTP 403 or a CAPTCHA/anti-bot challenge page.     |
-| `UNKNOWN`         | Product identity or availability could not be confidently determined. Default whenever parsing is ambiguous — **never** reported as a false `AVAILABLE`. |
-| `ERROR`           | Transient failure (network error, HTTP 429, 5xx). Previous known status is preserved in persisted state until a successful check updates it. |
+## Features
 
-## Verified retailer coverage (as of this V1)
+- **Per-retailer monitoring** on independent timers with random jitter and a staggered start, so requests never fire in lockstep.
+- **Confident product matching**: identity is verified from structured data (JSON-LD `schema.org/Product`, EAN/MPN) or strict keyword rules. Anything ambiguous is reported as `UNKNOWN`, **never** as a false `AVAILABLE`.
+- **Useful notifications only**: meaningful status transitions and significant price changes while buyable. Transient `ERROR`/`UNKNOWN` flapping is silenced.
+- **Polite back-off**: honours `Retry-After` on HTTP 429, uses capped exponential back-off, and slows down when a retailer blocks it.
+- **Survives restarts**: state is kept in an atomic JSON file with no database or native dependencies.
+- **Fully offline test suite**: adapters are tested against saved HTML fixtures and never hit the network.
 
-| Retailer      | Coverage                                                                                   |
-|---------------|-----------------------------------------------------------------------------------------------|
-| MediaMarkt ES | Known product URL/ID provided by the user (`1674231`). Adapter parses JSON-LD `schema.org/Product`. **Not live-verified against the real page in this session** — verify the JSON-LD shape against the live page before relying on it. |
-| Fnac ES       | Known product URL/slug provided by the user (`a13481099`). Adapter tries JSON-LD first, falls back to schema.org microdata. **Not live-verified** — confirm which structured-data format Fnac actually serves before relying on it. |
-| Amazon ES     | Structural adapter template only, **disabled by default**. No verified ASIN for this exact bundle was available at implementation time. TODO: research the correct ASIN, set `AMAZON_ES_ASIN` and `AMAZON_ES_ENABLED=true` in `.env`, and validate the adapter's DOM selectors (`#productTitle`, `#availability`, `.a-price`) against the real page before trusting it. |
-| El Corte Inglés ES | Structured-data adapter (JSON-LD first, microdata fallback), **disabled by default**. No verified direct product page for this exact bundle was found at implementation time — only a category page (`elcorteingles.pt/gaming/nintendo/nintendo-switch-2/`) listing an unrelated accessory (a 40th Anniversary case/screen protector bundle, not the console) was located. TODO: research the correct direct product URL, set `ELCORTEINGLES_ES_URL` and `ELCORTEINGLES_ES_ENABLED=true` in `.env`. **Do not** configure a category or accessory page as the product URL — the adapter's EAN/MPN/keyword matching will correctly reject it as `UNKNOWN`, but it wastes a check cycle and risks confusion. |
+## Supported retailers
 
-**TODO before broad rollout:** re-verify the EAN/MPN and each retailer's current page structure close to the product's actual release window (2026-10-29), since retailer markup and structured data change over time.
+| Retailer      | How the product is read                                                                                                              | Default                                     |
+|---------------|--------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------|
+| MediaMarkt ES | JSON-LD `BuyAction` → `ProductGroup` offers. Add-on services (installation, insurance) are ignored so they can't fake "in stock".      | Enabled                                     |
+| Amazon ES     | Identity verified by the model number (MPN) in the product details; price is read from the buy box only.                               | Opt-in: set `AMAZON_ES_ASIN` and `AMAZON_ES_ENABLED=true` |
+| GAME ES       | JSON-LD `Product` with nested `AggregateOffer`s.                                                                                      | Enabled                                     |
 
-## Non-goals / safety boundaries
+Page structures were live-verified on 2026-09-24. Retailer markup changes over time, so re-check the adapters close to a product's release date.
 
-- No cart automation, login, CAPTCHA solving, or checkout of any kind.
-- No anti-bot evasion (no proxy rotation for evasion, no browser fingerprint spoofing, no CAPTCHA solvers).
-- Adapters bias toward `UNKNOWN` over a false `AVAILABLE` whenever product identity or availability can't be confidently determined.
+**Not supported: Fnac ES and El Corte Inglés ES.** Both sit behind Akamai Bot Manager, which returns HTTP 403 to every automated client (even real headless Chrome). Getting past it would require anti-bot evasion, which this project won't do. For those stores, use their official alert channels instead.
 
-## Architecture
+## Quick start (Docker)
 
-```
-src/
-  domain/          stock-status.ts, product.ts, retailer.ts, transitions.ts — pure types & logic
-  adapters/         base.ts (RetailerAdapter interface) + one file per retailer + registry.ts
-  config/            index.ts (app config), product.ts (product identity), retailers.ts (retailer list) — env validated with Zod schemas
-  http/client.ts     shared fetch wrapper: realistic UA, Accept-Language, timeout, Retry-After parsing
-  http/status.ts     classifyHttpStatus() — HTTP status classification using http-status-codes StatusCodes constants
-  notifications/    telegram.ts (client), messages.ts (message formatting)
-  persistence/       store.ts — atomic JSON state store
-  scheduler/         monitor.ts (single check + notify), scheduler.ts (per-retailer timers/jitter/backoff)
-  utils/             logger.ts, backoff.ts, jitter.ts, price.ts, json-ld.ts, microdata.ts
-  index.ts           entrypoint
-test/
-  fixtures/<retailer>/   static HTML used by adapter tests (no live network)
-  adapters/, domain/, utils/, persistence/, notifications/, scheduler/
-```
-
-See `AGENTS.md` for the contract each adapter must follow and instructions for adding a new retailer.
-
-## Telegram bot setup
-
-1. Message [@BotFather](https://t.me/BotFather) on Telegram, send `/newbot`, and follow the prompts. You'll receive a bot token like `123456789:AA...` — this is `TELEGRAM_BOT_TOKEN`.
-2. Start a chat with your new bot (or add it to a group) and send it any message.
-3. Get your chat ID: visit `https://api.telegram.org/bot<TOKEN>/getUpdates` in a browser after sending the bot a message, and read `message.chat.id` from the JSON response. This is `TELEGRAM_CHAT_ID`.
-4. Put both values in `.env`. If they're missing, the monitor still runs and logs a warning — it just won't send notifications.
-
-## Local development
-
-Requires [Bun](https://bun.sh) 1.2+.
+You need Docker with Compose, and optionally a Telegram bot (see [Telegram setup](#telegram-setup)).
 
 ```bash
-cp .env.example .env
-# edit .env: at minimum set TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID if you want notifications
-bun install
-bun run dev        # bun --watch, runs src/index.ts directly
-bun run test       # vitest, fixture-based, no live network — use "bun run test", not "bun test" (Bun's own runner)
-bun run typecheck  # tsc --noEmit
-bun run build      # compiles to dist/
-```
-
-## Docker
-
-```bash
-cp .env.example .env
+git clone https://github.com/manelcecs/product-tracker.git
+cd product-tracker
+cp .env.example .env        # then fill in TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID
 docker compose up -d --build
 docker compose logs -f
 ```
 
-State is persisted under `./data` on the host (`state.json`), mounted into the container at `/app/data`, so it survives container restarts/recreation.
+State is written to `./data/state.json` on the host (mounted at `/app/data` in the container), so it survives restarts and upgrades.
 
-## CasaOS
+To stop it:
 
-1. Copy this repository (or just `docker-compose.yml`, `Dockerfile`, `src/`, `package.json`, `bun.lock`, `tsconfig.json`) to your CasaOS host.
-2. Create `.env` from `.env.example` and fill in your Telegram credentials.
-3. In CasaOS, use "Install a customized app" / compose import and point it at this `docker-compose.yml`, or run `docker compose up -d --build` over SSH in the project directory.
-4. Confirm the `./data` bind mount resolves to a persistent path on the CasaOS host so state survives app updates/reboots.
+```bash
+docker compose down
+```
 
-## Adding a retailer
+This works on any Docker host, including home-server platforms like CasaOS: import `docker-compose.yml` as a custom app, and make sure `./data` points to persistent storage.
 
-See the "Adding a retailer" section in `AGENTS.md`. Summary: add a `RetailerConfig` in `src/config/retailers.ts`, implement `src/adapters/<id>.ts` with a pure `parse()` method, register it in `src/adapters/registry.ts`, and add fixtures + tests under `test/`.
+## Telegram setup
 
-## Development workflow
+1. Message [@BotFather](https://t.me/BotFather), send `/newbot`, and follow the prompts. The token it gives you (`123456789:AA...`) is `TELEGRAM_BOT_TOKEN`.
+2. Open a chat with your new bot (or add it to a group) and send it any message.
+3. Open `https://api.telegram.org/bot<TOKEN>/getUpdates` and copy `message.chat.id`. That's `TELEGRAM_CHAT_ID`.
+4. Put both in `.env`.
 
-This repository follows trunk-based development. Keep branches short-lived, keep commits atomic with one closed scope per commit, and squash merge reviewed pull requests into the main branch so history stays linear and easy to audit.
+Without these two values the monitor still runs and logs results. It just doesn't send notifications.
 
-## Debugging an adapter
+## Configuration
 
-- Set `LOG_LEVEL=debug` and `LOG_PRETTY=true` in `.env` for readable structured logs (retailer, status, previous status, HTTP status, duration, price, consecutive failures, next scheduled check).
-- To debug parsing logic without hitting the network, save a copy of the retailer's page HTML into `test/fixtures/<id>/` and write/run a quick Vitest case calling the adapter's `parse()` method directly with that HTML and the observed HTTP status.
-- `evidence` on every `ProductAvailability` result records exactly which structured-data source (`json-ld:name`, `microdata:availability`, `dom:#availability`, ...) drove the verdict — log or inspect it when a result looks wrong.
-- A `BLOCKED` result usually means the retailer served a CAPTCHA/Cloudflare-style challenge page (403 or detected anti-bot markers) — this is expected behavior, not a bug to "fix" by evading the block.
+Everything is configured through environment variables. [`.env.example`](.env.example) is the full, commented reference; these are the main ones:
 
-## Configuration reference
+| Variable                              | Default            | Purpose                                                                 |
+|---------------------------------------|--------------------|-------------------------------------------------------------------------|
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` | —               | Where notifications go.                                                  |
+| `CHECK_INTERVAL_MIN_SECONDS` / `_MAX_SECONDS` | `60` / `80` | Random delay window between checks for each retailer.                    |
+| `SIGNIFICANT_PRICE_CHANGE_PERCENT`    | `5`                | Minimum price change (%) that triggers a notification while buyable.    |
+| `DATA_DIR`                            | `./data`           | Where `state.json` is stored.                                            |
+| `LOG_LEVEL`, `LOG_PRETTY`             | `info`, `false`    | Structured logging (pino). Set `LOG_PRETTY=true` for readable local logs. |
+| `PRODUCT_NAME`, `PRODUCT_EAN`, `PRODUCT_MPN`, `PRODUCT_RELEASE_DATE` | Zelda bundle | Identity of the product to track.                      |
+| `PRODUCT_REQUIRED_KEYWORDS`           | `nintendo switch 2,zelda,40` | All must appear in the title when EAN/MPN aren't available.    |
+| `PRODUCT_EXCLUDED_KEYWORDS`           | accessories list   | Any of these rules out a match (cases, controllers, amiibo…).            |
+| `<RETAILER>_ENABLED`, `<RETAILER>_URL` (Amazon: `AMAZON_ES_ASIN`) | see above | Turn a retailer on or off and point it at the product page. |
+| `<RETAILER>_CHECK_INTERVAL_MIN_SECONDS` / `_MAX_SECONDS` | global values | Per-retailer interval override.                        |
 
-See `.env.example` for the full list with defaults and comments: Telegram credentials, scheduling window (`CHECK_INTERVAL_MIN_SECONDS`/`MAX_SECONDS`, default 60–80s with jitter), `SIGNIFICANT_PRICE_CHANGE_PERCENT`, `DATA_DIR`, logging, product identity (`PRODUCT_NAME`, `PRODUCT_EAN`, `PRODUCT_MPN`, `PRODUCT_RELEASE_DATE`, `PRODUCT_REQUIRED_KEYWORDS`, `PRODUCT_EXCLUDED_KEYWORDS`), and per-retailer URL/enabled flags.
+### Tracking a different product
 
-## Notification behavior
+Set the `PRODUCT_*` variables to the new product's identity, then point each retailer's `_URL` (or `AMAZON_ES_ASIN`) at its product page. Always set `PRODUCT_EAN`/`PRODUCT_MPN` when you know them, since they're the most reliable way to match a product. Keywords are the fallback.
 
-- **Initialization**: the first time a retailer has no persisted state, one Telegram message is sent with its status, price (if known), URL, and timestamp — regardless of what that initial status is.
-- **After initialization**: notifications are sent only for meaningful status transitions (anything involving `AVAILABLE`, `PREORDER`, `OUT_OF_STOCK`, `COMING_SOON`, `PRODUCT_REMOVED`, or `BLOCKED`). Flapping between `ERROR`/`UNKNOWN` is silenced.
-- **Price changes**: only notified when the status is unchanged and purchasable (`AVAILABLE`/`PREORDER`), and the relative change exceeds `SIGNIFICANT_PRICE_CHANGE_PERCENT`. Price-only changes while unavailable never notify.
-- Telegram failures are retried (up to 3 attempts with backoff) and deduped by key for 60s, but never stop the monitoring loop.
+## How it behaves
 
-## Scheduling & resilience
+### Stock states
 
-- Each retailer runs on its own independent timer with a random delay inside `[CHECK_INTERVAL_MIN_SECONDS, CHECK_INTERVAL_MAX_SECONDS]` (default 60–80s), plus a staggered initial start so retailers don't all fire at once.
-- HTTP 429: backs off using `Retry-After` if the server provided it; otherwise escalates through a capped exponential sequence (60s → 120s → 240s → 480s → 960s) keyed by consecutive failures.
-- HTTP 403 or a detected CAPTCHA/anti-bot page → `BLOCKED`, which also forces a reduced check frequency.
-- Network errors / 5xx → `ERROR`; the previously known status is preserved in persisted state (an `ERROR` never overwrites `AVAILABLE`/`OUT_OF_STOCK`/etc. from the last successful check).
+| Status            | Meaning                                                                                   |
+|-------------------|-------------------------------------------------------------------------------------------|
+| `AVAILABLE`       | Verified product, in stock, buyable now.                                                  |
+| `PREORDER`        | Verified product, can be reserved before release.                                         |
+| `OUT_OF_STOCK`    | Verified product, currently sold out.                                                     |
+| `COMING_SOON`     | Verified product, listed but not yet orderable.                                           |
+| `PRODUCT_REMOVED` | The page returned HTTP 404.                                                               |
+| `BLOCKED`         | HTTP 403 or an anti-bot/CAPTCHA page. Checks slow down automatically.                    |
+| `UNKNOWN`         | Identity or availability couldn't be confidently determined.                              |
+| `ERROR`           | Network error, HTTP 429 or 5xx. The last known good status is kept.                       |
+
+### Notifications
+
+- **First run**: one message per retailer with its initial status, price, and link.
+- **After that**: only for real transitions involving `AVAILABLE`, `PREORDER`, `OUT_OF_STOCK`, `COMING_SOON`, `PRODUCT_REMOVED`, or `BLOCKED`.
+- **Price changes**: only while the status is unchanged and buyable (`AVAILABLE`/`PREORDER`), and only above `SIGNIFICANT_PRICE_CHANGE_PERCENT`.
+- Telegram failures are retried up to 3 times and de-duplicated. A failure never stops monitoring.
+
+### Rate limiting and errors
+
+- **HTTP 429** backs off using `Retry-After` when given, otherwise 60s → 120s → 240s → 480s → 960s (capped).
+- **HTTP 403 or a challenge page** results in `BLOCKED` and a slower check rate. This is expected, not something to "fix" by evading it.
+- **Network errors and 5xx** result in `ERROR` and never overwrite the last successful status.
+
+## Development
+
+Requires [Bun](https://bun.sh) 1.2 or newer.
+
+```bash
+cp .env.example .env
+bun install
+bun run dev         # watch mode, runs src/index.ts directly
+bun run test        # Vitest against saved HTML fixtures, no network
+bun run typecheck   # tsc --noEmit
+bun run build       # compile to dist/; `bun run start` runs it
+```
+
+Use `bun run test`, not `bun test`. The latter runs Bun's built-in test runner instead of Vitest.
+
+### Project layout
+
+```
+src/
+  domain/          pure types and matching/transition logic (no I/O)
+  adapters/        one file per retailer + registry.ts
+  config/          Zod-validated env config: app, product identity, retailers
+  http/            shared HTTP client and status classification
+  notifications/   Telegram client and message formatting
+  persistence/     atomic JSON state store
+  scheduler/       per-check monitor and per-retailer timers
+  utils/           logging, back-off, jitter, price and JSON-LD parsing, challenge detection
+test/
+  fixtures/<retailer>/   saved HTML pages used by adapter tests
+```
+
+### Adding a retailer
+
+Each retailer is an adapter with a pure `parse(html, httpStatus)` method that tests call directly with fixture HTML. In short:
+
+1. Add a `RetailerConfig` in `src/config/retailers.ts`.
+2. Implement `src/adapters/<id>.ts`, preferring structured data and returning `UNKNOWN` whenever identity can't be confirmed.
+3. Register it in `src/adapters/registry.ts`.
+4. Add fixtures (available, unavailable, wrong product, malformed, 403, 429) and a test file.
+
+[`AGENTS.md`](AGENTS.md) has the full adapter contract.
+
+### Debugging an adapter
+
+- Run with `LOG_LEVEL=debug LOG_PRETTY=true` to see status, HTTP code, price, duration, and next check time for each retailer.
+- Every result carries an `evidence` field recording which source (`json-ld:availability`, `dom:#availability`, …) drove the verdict.
+- To reproduce a parsing problem offline, save the page HTML under `test/fixtures/<id>/` and write a Vitest case that calls `parse()` on it.
+
+## Safety boundaries
+
+These are deliberate design constraints, not missing features:
+
+- No purchase, cart, checkout, login, or payment automation of any kind.
+- No anti-bot evasion: no CAPTCHA solvers, proxy rotation, or browser fingerprint spoofing.
+- Only publicly served product pages are read, at a modest, jittered rate.
+- When in doubt, report `UNKNOWN`. A false "in stock" alert is worse than a missed one.
+
+Please respect each retailer's terms of use and keep check intervals reasonable.
+
+## License
+
+[MIT](LICENSE)

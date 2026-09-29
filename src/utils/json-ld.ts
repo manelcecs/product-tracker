@@ -4,6 +4,7 @@ export interface JsonLdOffer {
   price?: string | number;
   priceCurrency?: string;
   availability?: string;
+  itemCondition?: string;
   seller?: { name?: string };
 }
 
@@ -37,18 +38,30 @@ export function extractJsonLdProducts(html: string): JsonLdProduct[] {
   return results;
 }
 
+/**
+ * Descends only into well-defined structural wrappers — never into `offers`
+ * or `addOn`/`itemOffered`, which can carry unrelated in-stock line items
+ * (installation services, accessories) that must never be mistaken for the
+ * product's own availability.
+ */
 function collectProductNodes(node: unknown, results: JsonLdProduct[]): void {
   if (!node || typeof node !== 'object') return;
   const record = node as Record<string, unknown>;
   const type = record['@type'];
   const types = Array.isArray(type) ? type : [type];
-  if (types.includes('Product')) {
+  if (types.includes('Product') || types.includes('ProductGroup')) {
     results.push(record as JsonLdProduct);
   }
   if (Array.isArray(record['@graph'])) {
     for (const child of record['@graph'] as unknown[]) {
       collectProductNodes(child, results);
     }
+  }
+  if (types.includes('BuyAction') && record['object'] && typeof record['object'] === 'object') {
+    collectProductNodes(record['object'], results);
+  }
+  if (record['mainEntity'] && typeof record['mainEntity'] === 'object') {
+    collectProductNodes(record['mainEntity'], results);
   }
 }
 

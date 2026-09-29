@@ -18,41 +18,40 @@ describe('loadRetailerConfigs', () => {
   });
 
   it('rejects invalid per-retailer interval overrides', () => {
-    process.env.FNAC_ES_CHECK_INTERVAL_MIN_SECONDS = '120';
-    process.env.FNAC_ES_CHECK_INTERVAL_MAX_SECONDS = '60';
+    process.env.AMAZON_ES_CHECK_INTERVAL_MIN_SECONDS = '120';
+    process.env.AMAZON_ES_CHECK_INTERVAL_MAX_SECONDS = '60';
 
-    expect(() => loadRetailerConfigs()).toThrow(/FNAC_ES_CHECK_INTERVAL/);
+    expect(() => loadRetailerConfigs()).toThrow(/AMAZON_ES_CHECK_INTERVAL/);
   });
 
-  it('disables El Corte Inglés ES by default with no product URL', () => {
-    delete process.env.ELCORTEINGLES_ES_URL;
-    delete process.env.ELCORTEINGLES_ES_ENABLED;
-
-    const elCorteIngles = loadRetailerConfigs().find((retailer) => retailer.id === 'elcorteingles-es');
-
-    expect(elCorteIngles?.enabled).toBe(false);
-    expect(elCorteIngles?.productUrl).toBe('');
+  it('only configures the supported retailers', () => {
+    expect(loadRetailerConfigs().map((retailer) => retailer.id)).toEqual(['mediamarkt-es', 'amazon-es', 'game-es']);
   });
 
-  it('keeps El Corte Inglés ES disabled unless both a URL and the enabled flag are set', () => {
-    process.env.ELCORTEINGLES_ES_URL = 'https://www.elcorteingles.es/example/a40123456';
-    process.env.ELCORTEINGLES_ES_ENABLED = 'false';
+  it('enables Amazon ES only when both an ASIN and the enabled flag are provided', () => {
+    delete process.env.AMAZON_ES_ASIN;
+    delete process.env.AMAZON_ES_ENABLED;
+    expect(loadRetailerConfigs().find((r) => r.id === 'amazon-es')?.enabled).toBe(false);
 
-    expect(loadRetailerConfigs().find((r) => r.id === 'elcorteingles-es')?.enabled).toBe(false);
-
-    delete process.env.ELCORTEINGLES_ES_URL;
-    process.env.ELCORTEINGLES_ES_ENABLED = 'true';
-
-    expect(loadRetailerConfigs().find((r) => r.id === 'elcorteingles-es')?.enabled).toBe(false);
+    process.env.AMAZON_ES_ASIN = 'B0F2TN43GH';
+    process.env.AMAZON_ES_ENABLED = 'true';
+    const amazon = loadRetailerConfigs().find((retailer) => retailer.id === 'amazon-es');
+    expect(amazon?.enabled).toBe(true);
+    expect(amazon?.productUrl).toBe('https://www.amazon.es/dp/B0F2TN43GH');
   });
 
-  it('enables El Corte Inglés ES only when both URL and enabled flag are provided', () => {
-    process.env.ELCORTEINGLES_ES_URL = 'https://www.elcorteingles.es/example/a40123456';
-    process.env.ELCORTEINGLES_ES_ENABLED = 'true';
+  it('defaults GAME ES to enabled with a default product URL', () => {
+    delete process.env.GAME_ES_ENABLED;
+    delete process.env.GAME_ES_URL;
 
-    const elCorteIngles = loadRetailerConfigs().find((retailer) => retailer.id === 'elcorteingles-es');
+    const game = loadRetailerConfigs().find((retailer) => retailer.id === 'game-es');
 
-    expect(elCorteIngles?.enabled).toBe(true);
-    expect(elCorteIngles?.productUrl).toBe('https://www.elcorteingles.es/example/a40123456');
+    expect(game?.enabled).toBe(true);
+    expect(game?.productUrl).toContain('game.es');
+  });
+
+  it('disables GAME ES when GAME_ES_ENABLED is explicitly "false"', () => {
+    process.env.GAME_ES_ENABLED = 'false';
+    expect(loadRetailerConfigs().find((r) => r.id === 'game-es')?.enabled).toBe(false);
   });
 });

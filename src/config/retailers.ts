@@ -10,7 +10,6 @@ const intervalOverrideSchema = z
 
 export function loadRetailerConfigs(): RetailerConfig[] {
   const amazonAsin = process.env.AMAZON_ES_ASIN || undefined;
-  const elCorteInglesUrl = process.env.ELCORTEINGLES_ES_URL || undefined;
 
   return [
     {
@@ -24,34 +23,24 @@ export function loadRetailerConfigs(): RetailerConfig[] {
       meta: { retailerProductId: '1674231' },
     },
     {
-      id: 'fnac-es',
-      name: 'Fnac ES',
-      productUrl:
-        process.env.FNAC_ES_URL ??
-        'https://www.fnac.es/Consola-Nintendo-Switch-2-The-Legend-of-Zelda-40-Aniversario-Videoconsola/a13481099',
-      enabled: process.env.FNAC_ES_ENABLED !== 'false',
-      checkIntervalMsOverride: loadIntervalOverride('FNAC_ES'),
-      meta: { retailerProductId: 'a13481099' },
-    },
-    {
       id: 'amazon-es',
       name: 'Amazon ES',
       productUrl: amazonAsin ? `https://www.amazon.es/dp/${amazonAsin}` : '',
-      // Disabled by default: no verified ASIN for this exact bundle yet.
-      // Set AMAZON_ES_ASIN and AMAZON_ES_ENABLED=true once confirmed.
+      // Verified ASIN B0F2TN43GH (live-checked 2026-09-24). Set
+      // AMAZON_ES_ASIN and AMAZON_ES_ENABLED=true to enable.
       enabled: Boolean(amazonAsin) && process.env.AMAZON_ES_ENABLED === 'true',
       checkIntervalMsOverride: loadIntervalOverride('AMAZON_ES'),
       meta: { asin: amazonAsin ?? null },
     },
     {
-      id: 'elcorteingles-es',
-      name: 'El Corte Inglés ES',
-      productUrl: elCorteInglesUrl ?? '',
-      // Disabled by default: no verified direct product URL for this exact
-      // bundle yet (category/accessory pages don't count). Set
-      // ELCORTEINGLES_ES_URL and ELCORTEINGLES_ES_ENABLED=true once confirmed.
-      enabled: Boolean(elCorteInglesUrl) && process.env.ELCORTEINGLES_ES_ENABLED === 'true',
-      checkIntervalMsOverride: loadIntervalOverride('ELCORTEINGLES_ES'),
+      id: 'game-es',
+      name: 'GAME ES',
+      productUrl:
+        process.env.GAME_ES_URL ??
+        'https://www.game.es/nintendo-switch-2-edicion-zelda-40th-nintendo-switch-2-267689',
+      enabled: process.env.GAME_ES_ENABLED !== 'false',
+      checkIntervalMsOverride: loadIntervalOverride('GAME_ES'),
+      meta: { retailerProductId: '267689' },
     },
   ];
 }
